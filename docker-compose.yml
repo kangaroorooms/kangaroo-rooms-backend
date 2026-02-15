@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: kangaroo_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kangaroo
+      POSTGRES_PASSWORD: kangaroo_password
+      POSTGRES_DB: kangaroo_rooms
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kangaroo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis — Idempotency L1 cache + stampede lock
+  # Memory policy: volatile-lru evicts only keys with TTL set.
+  # All idempotency keys have TTL, so they're eligible for eviction.
+  # Non-TTL keys (if any future use) are protected from eviction.
+  redis:
+    image: redis:7-alpine
+    container_name: kangaroo_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy volatile-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --tcp-keepalive 60
+      --timeout 300
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kangaroo_api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://kangaroo:kangaroo_password@postgres:5432/kangaroo_rooms?schema=public
+      REDIS_URL: redis://redis:6379
+      REDIS_ENABLED: "true"
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: http://localhost:3000
+      ENABLE_SWAGGER: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && npx prisma db seed && node dist/index.js"
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

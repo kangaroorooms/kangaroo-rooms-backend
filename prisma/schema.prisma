@@ -1,0 +1,382 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                       String                    @id @default(uuid())
+  email                    String                    @unique
+  password                 String
+  name                     String
+  phone                    String?
+  role                     Role                      @default(TENANT)
+  city                     String?
+  isActive                 Boolean                   @default(true)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  agentPropertyAssignments AgentPropertyAssignment[] @relation("AgentPropertyAssignments")
+  agentTenantAssignments   AgentTenantAssignment[]   @relation("AgentTenantAssignments")
+  tenantAgentAssignments   AgentTenantAssignment[]   @relation("TenantAgentAssignments")
+  ownerBookings            Booking[]                 @relation("OwnerBookings")
+  tenantBookings           Booking[]                 @relation("TenantBookings")
+  payments                 Payment[]
+  authoredNotes            PropertyNote[]            @relation("NoteAuthor")
+  deletedNotes             PropertyNote[]            @relation("NoteDeleter")
+  ownedRooms               Room[]                    @relation("RoomOwner")
+  subscriptions            TenantSubscription[]
+  idempotencyRecords       IdempotencyRecord[]
+}
+
+model Room {
+  id                       String                    @id @default(uuid())
+  title                    String
+  description              String
+  city                     String
+  location                 String
+  landmark                 String
+  pricePerMonth            Int
+  roomType                 String
+  idealFor                 String[]
+  amenities                String[]
+  images                   String[]
+  rating                   Float                     @default(0)
+  reviewsCount             Int                       @default(0)
+  reviewStatus             ReviewStatus              @default(PENDING)
+  isActive                 Boolean                   @default(true)
+  isPopular                Boolean                   @default(false)
+  adminFeedback            Json?
+  ownerId                  String
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  agentPropertyAssignments AgentPropertyAssignment[] @relation("PropertyAssignments")
+  bookings                 Booking[]
+  propertyNotes            PropertyNote[]            @relation("PropertyNotes")
+  propertyViews            PropertyView[]
+  owner                    User                      @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([city])
+  @@index([roomType])
+  @@index([pricePerMonth])
+  @@index([ownerId])
+  @@index([reviewStatus])
+  @@index([isActive])
+}
+
+model Booking {
+  id          String        @id @default(uuid())
+  roomId      String
+  ownerId     String
+  tenantId    String?
+  tenantName  String
+  tenantEmail String
+  tenantPhone String
+  moveInDate  DateTime
+  message     String?
+  status      BookingStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  owner       User          @relation("OwnerBookings", fields: [ownerId], references: [id], onDelete: Cascade)
+  room        Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  tenant      User?         @relation("TenantBookings", fields: [tenantId], references: [id])
+
+  // OLD: @@unique([roomId, tenantEmail, moveInDate], name: "unique_booking_per_room_tenant_date")
+  // REPLACED BY: Partial unique index via raw SQL migration (see migration steps)
+  // This allows rebooking after rejection while preventing duplicate active bookings.
+
+  @@index([roomId])
+  @@index([tenantId])
+  @@index([ownerId, status, createdAt(sort: Desc)], map: "idx_booking_owner_status_created")
+  @@index([moveInDate, status], map: "idx_booking_movein_status")
+  @@index([status, createdAt(sort: Desc)], map: "idx_booking_status_created")
+  @@index([roomId, tenantEmail, status], map: "idx_booking_active_duplicate_check")
+}
+
+model CityPricing {
+  id        String   @id @default(uuid())
+  city      String
+  plan      String
+  price     Int
+  createdAt DateTime @default(now())
+
+  @@unique([city, plan])
+}
+
+model TenantSubscriptionPlan {
+  id             String   @id @default(uuid())
+  name           String
+  hasCallSupport Boolean
+  createdAt      DateTime @default(now())
+}
+
+model TenantSubscription {
+  id        String    @id @default(uuid())
+  tenantId  String
+  plan      String
+  city      String
+  startedAt DateTime  @default(now())
+  expiresAt DateTime?
+  payment   Payment?
+  tenant    User      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, city])
+  @@index([tenantId])
+  @@index([plan])
+  @@index([city])
+}
+
+model PlanLimit {
+  id           String   @id @default(uuid())
+  plan         String
+  city         String?  // NULL = global default for this plan
+  contactLimit Int?     // NULL = unlimited
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([plan, city])
+  @@index([plan])
+  @@map("plan_limits")
+}
+
+model PropertyView {
+  id         String   @id @default(uuid())
+  tenantId   String
+  propertyId String
+  city       String   // Denormalized from Room.city at unlock time — eliminates JOIN in count queries
+  viewedAt   DateTime @default(now())
+  property   Room     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, propertyId])
+  @@index([tenantId])
+  @@index([propertyId])
+  @@index([tenantId, city])  // Fast city-scoped counting for FREE tier limits
+}
+
+model Payment {
+  id                String              @id @default(uuid())
+  tenantId          String
+  plan              String
+  city              String
+  amount            Int
+  orderId           String              @unique
+  razorpayPaymentId String?
+  utr               String?
+  status            PaymentStatus       @default(CREATED)
+  metadata          Json?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  verifiedAt        DateTime?
+  subscriptionId    String?             @unique
+  userId            String?
+  subscription      TenantSubscription? @relation(fields: [subscriptionId], references: [id])
+  User              User?               @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AgentPropertyAssignment {
+  id              String    @id @default(uuid())
+  agentId         String
+  propertyId      String
+  assignedBy      String
+  assignmentNotes String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deactivatedAt   DateTime?
+  agent           User      @relation("AgentPropertyAssignments", fields: [agentId], references: [id])
+  property        Room      @relation("PropertyAssignments", fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, propertyId])
+  @@index([agentId])
+  @@index([propertyId])
+  @@index([assignedBy])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([agentId, isActive])
+  @@index([propertyId, isActive])
+}
+
+model AgentTenantAssignment {
+  id            String    @id @default(uuid())
+  agentId       String
+  tenantId      String
+  assignedBy    String
+  reason        String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deactivatedAt DateTime?
+  agent         User      @relation("AgentTenantAssignments", fields: [agentId], references: [id])
+  tenant        User      @relation("TenantAgentAssignments", fields: [tenantId], references: [id])
+
+  @@unique([agentId, tenantId])
+  @@index([agentId])
+  @@index([tenantId])
+  @@index([assignedBy])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([agentId, isActive])
+  @@index([tenantId, isActive])
+}
+
+model PropertyNote {
+  id         String    @id @default(uuid())
+  propertyId String
+  authorId   String
+  content    String
+  isDeleted  Boolean   @default(false)
+  deletedAt  DateTime?
+  deletedBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  author     User      @relation("NoteAuthor", fields: [authorId], references: [id])
+  deleter    User?     @relation("NoteDeleter", fields: [deletedBy], references: [id])
+  property   Room      @relation("PropertyNotes", fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([authorId])
+  @@index([isDeleted])
+  @@index([createdAt])
+  @@index([propertyId, isDeleted])
+  @@index([authorId, isDeleted])
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String
+  type        NotificationType
+  title       String
+  message     String
+  payload     Json?
+  referenceId String?
+  isRead      Boolean          @default(false)
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@unique([recipientId, type, referenceId])
+  @@index([recipientId])
+  @@index([recipientId, isRead])
+  @@index([recipientId, createdAt])
+  @@index([createdAt])
+}
+
+model IdempotencyRecord {
+  id           String   @id @default(uuid())
+  /// The client-provided idempotency key (UUID v4). UNIQUE constraint
+  /// serves double duty: fast O(log n) lookup AND race condition protection.
+  /// Two simultaneous requests with the same key → one wins, one gets P2002.
+  /// The authenticated user who made the request. Scoped per-user so
+  /// different users can't replay each other's keys.
+  key          String   @unique
+  /// The authenticated user who made the request. Scoped per-user so
+  /// different users can't replay each other's keys.
+  userId       String
+  /// SHA256 hash of the normalized (sorted-keys) request body.
+  /// Used to detect payload mismatch on key reuse (→ 409 Conflict).
+  /// Never store raw payload: privacy, storage efficiency, tamper resistance.
+  requestHash  String
+  /// The full JSON response body returned to the client on first execution.
+  /// Replayed verbatim on subsequent requests with matching key + hash.
+  responseBody Json
+  /// HTTP status code of the original response (e.g., 201 for created).
+  /// Replayed alongside responseBody for exact response reproduction.
+  statusCode   Int
+  /// TTL expiration timestamp. Default: 24 hours from creation.
+  /// After expiry, the record is eligible for cleanup and the key can be reused.
+  /// 24h matches Stripe's strategy: covers retry windows, session duration,
+  /// and payment processing delays without unbounded storage growth.
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([key, userId])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+model OutboxEvent {
+  id            String    @id @default(uuid())
+  /// The type of aggregate that produced this event (BOOKING, PAYMENT, etc.)
+  aggregateType String
+  /// The ID of the aggregate instance (bookingId, paymentId, etc.)
+  aggregateId   String
+  /// The specific event type (BOOKING_CREATED, BOOKING_STATUS_CHANGED, etc.)
+  eventType     String
+  /// Full event payload as JSONB. Contains all data needed to process the event.
+  /// Consumers should NEVER need to query the database for additional context.
+  payload       Json
+  /// Current processing status
+  /// PENDING → PROCESSING → DELIVERED (happy path)
+  /// PENDING → PROCESSING → FAILED → PENDING (retry)
+  /// PENDING → PROCESSING → FAILED → ... → DEAD_LETTER (poison pill)
+  status        String    @default("PENDING")
+  /// Number of delivery attempts. Starts at 0.
+  retryCount    Int       @default(0)
+  /// Maximum retries before dead-lettering. Default: 5.
+  maxRetries    Int       @default(5)
+  /// When the next retry should be attempted (exponential backoff).
+  /// NULL means immediately eligible for processing.
+  nextRetryAt   DateTime?
+  /// Last error message from failed delivery attempt.
+  /// Truncated to 500 chars to prevent bloat.
+  lastError     String?
+  /// Timestamp when the event was successfully delivered.
+  processedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, nextRetryAt, createdAt], map: "idx_outbox_worker_poll")
+  @@index([aggregateType, aggregateId], map: "idx_outbox_aggregate_lookup")
+  @@index([status], map: "idx_outbox_status")
+  @@index([status, processedAt], map: "idx_outbox_cleanup")
+  @@index([createdAt], map: "idx_outbox_created")
+  @@map("outbox_events")
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PaymentStatus {
+  CREATED
+  INITIATED
+  PENDING
+  VERIFIED
+  FAILED
+  EXPIRED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  NEEDS_CORRECTION
+  REJECTED
+}
+
+enum NotificationType {
+  AGENT_PROPERTY_ASSIGNED
+  AGENT_PROPERTY_UNASSIGNED
+  AGENT_TENANT_ASSIGNED
+  AGENT_TENANT_UNASSIGNED
+  PROPERTY_NOTE_CREATED
+  BOOKING_CREATED
+  BOOKING_APPROVED
+  BOOKING_REJECTED
+}
+
+enum Role {
+  TENANT
+  OWNER
+  AGENT
+  ADMIN
+}
