@@ -1,6 +1,7 @@
 import { IRoomRepository } from '../repositories/interfaces';
 import { Room, CreateRoomInput, UpdateRoomInput, RoomFilters } from '../models/Room';
 import { CloudinaryService } from './CloudinaryService';
+import { logger } from '../utils/logger';
 export class RoomService {
   private roomRepository: IRoomRepository;
   private cloudinaryService: CloudinaryService;
@@ -46,7 +47,9 @@ export class RoomService {
    * This matches the RoomController's call signature
    */
   async createRoom(roomData: any): Promise<Room> {
-    console.log('[RoomService] Creating room with data:', JSON.stringify(roomData, null, 2));
+    logger.info('Creating room', {
+      ownerId: roomData.ownerId
+    });
 
     // Validate ownerId is present
     if (!roomData.ownerId) {
@@ -85,7 +88,9 @@ export class RoomService {
       try {
         await this.cloudinaryService.deleteImages(room.images);
       } catch (error) {
-        console.error('Error deleting Cloudinary images:', error);
+        logger.error('Error deleting Cloudinary images', {
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
         // Continue with room deletion even if image cleanup fails
       }
     }

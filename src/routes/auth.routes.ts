@@ -34,11 +34,11 @@ const authController = new AuthController(authService);
 router.use(authRateLimiter);
 
 // Register
-router.post('/register', validateBody(RegisterSchema), authController.register);
+router.post('/register', validateBody(RegisterSchema), (req, res, next) => authController.register(req, res));
 
 // Login
-router.post('/login', validateBody(LoginSchema), authController.login);
+router.post('/login', validateBody(LoginSchema), (req, res, next) => authController.login(req, res));
 
 // Current user
-router.get('/me', authMiddleware, authController.getCurrentUser);
+router.get('/me', authMiddleware, (req, res, next) => authController.getCurrentUser(req as any, res));
 export default router;

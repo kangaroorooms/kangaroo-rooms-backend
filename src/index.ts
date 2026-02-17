@@ -2,49 +2,47 @@ import express from 'express';
 import { env } from './config/env';
 import { errorHandler } from './middleware/error.middleware';
 import { requestLogger } from './middleware/logging.middleware';
-import { helmetMiddleware, corsMiddleware, generalRateLimiter } from './middleware/security.middleware';
+import {
+  helmetMiddleware,
+  corsMiddleware,
+  generalRateLimiter } from
+'./middleware/security.middleware';
 import { logger } from './utils/logger';
 import routes from './routes';
 import healthRoutes from './routes/health.routes';
 import { setupSwagger } from './swagger';
-import { cleanupExpiredIdempotencyRecords, getIdempotencyMetrics } from './middleware/idempotency.middleware';
-import { initializeRedis, shutdownRedis, getRedisHealth } from './utils/redis';
+import {
+  cleanupExpiredIdempotencyRecords,
+  getIdempotencyMetrics } from
+'./middleware/idempotency.middleware';
 import { idempotencyMetrics } from './utils/metrics';
-import { startOutboxWorker, stopOutboxWorker, getOutboxDetailedStats, cleanupDeliveredOutboxEvents } from './services/OutboxWorker';
+import {
+  startOutboxWorker,
+  stopOutboxWorker,
+  getOutboxDetailedStats,
+  cleanupDeliveredOutboxEvents } from
+'./services/OutboxWorker';
 const app = express();
-console.log('DB URL =>', process.env.DATABASE_URL);
-
-// ── Initialize Redis (if enabled) ──
-// Redis is optional — system degrades gracefully to DB-only mode.
-// This MUST happen before middleware registration so the idempotency
-// middleware can use the Redis client from its first request.
-if (env.REDIS_ENABLED) {
-  try {
-    initializeRedis(env.REDIS_URL);
-    logger.info(`Redis: Initializing connection to ${env.REDIS_URL.replace(/\/\/.*@/, '//***@')}`);
-  } catch (error: any) {
-    logger.error('Redis: Failed to initialize — running in DB-only mode', {
-      error: error.message
-    });
-  }
-} else {
-  logger.info('Redis: Disabled via REDIS_ENABLED=false — DB-only idempotency mode');
-}
 
 // Security middleware
 app.use(helmetMiddleware);
 app.use(corsMiddleware);
-// app.use(generalRateLimiter);
 
-// Body parsing
 // Body parsing (increase limit for base64 images)
-app.use(express.json({
-  limit: '20mb'
-}));
-app.use(express.urlencoded({
-  limit: '20mb',
-  extended: true
-}));
+app.use(
+  express.json({
+    limit: '20mb'
+  })
+);
+app.use(
+  express.urlencoded({
+    limit: '20mb',
+    extended: true
+  })
+);
+
+// Rate limiting (after body parsing, before routes)
+app.use(generalRateLimiter);
 
 // Request logging
 app.use(requestLogger);
@@ -52,17 +50,16 @@ app.use(requestLogger);
 // Health check (before rate limiting for monitoring)
 app.use('/health', healthRoutes);
 
-// ── Enhanced health endpoint with Redis + Idempotency + Outbox metrics ──
+// ── Enhanced health endpoint with Idempotency + Outbox metrics ──
 app.get('/health/detailed', async (_req, res) => {
-  const redisHealth = getRedisHealth();
   const idempotencySnapshot = getIdempotencyMetrics();
   const outboxStats = await getOutboxDetailedStats();
-  const overallStatus = redisHealth.connected && idempotencySnapshot.health.status !== 'critical' ? 'healthy' : redisHealth.connected ? 'degraded' : 'degraded_no_redis';
+  const overallStatus =
+  idempotencySnapshot.health.status !== 'critical' ? 'healthy' : 'degraded';
   res.json({
     status: overallStatus,
     timestamp: new Date().toISOString(),
     services: {
-      redis: redisHealth,
       idempotency: idempotencySnapshot,
       outbox: outboxStats
     }
@@ -80,7 +77,6 @@ if (env.ENABLE_SWAGGER) {
 
 // ── Idempotency TTL Cleanup ──
 // Runs every hour to purge expired idempotency records from PostgreSQL.
-// Redis keys auto-expire via TTL — no cleanup needed.
 // Uses the expiresAt B-tree index for O(log n) range scan.
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -142,7 +138,6 @@ async function startServer() {
       logger.info(`🚀 Server running on port ${env.PORT}`);
       logger.info(`📝 Environment: ${env.NODE_ENV}`);
       logger.info(`💾 Database: PostgreSQL (Prisma ORM)`);
-      logger.info(`🔴 Redis: ${env.REDIS_ENABLED ? 'Enabled' : 'Disabled (DB-only mode)'}`);
       if (env.ENABLE_SWAGGER) {
         logger.info(`📚 API Docs: http://localhost:${env.PORT}/api-docs`);
       }
@@ -163,8 +158,6 @@ async function gracefulShutdown(signal: string) {
   // Shutdown metrics logging
   idempotencyMetrics.shutdown();
 
-  // Disconnect Redis
-  await shutdownRedis();
   logger.info('Cleanup complete, exiting');
   process.exit(0);
 }

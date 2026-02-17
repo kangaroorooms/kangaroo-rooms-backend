@@ -24,9 +24,9 @@ if (!cloudName || !apiKey || !apiSecret) {
   console.log('  - CLOUDINARY_API_SECRET');
   process.exit(1);
 }
-console.log(`✅ CLOUDINARY_CLOUD_NAME: ${cloudName}`);
-console.log(`✅ CLOUDINARY_API_KEY: ${apiKey.substring(0, 6)}***`);
-console.log(`✅ CLOUDINARY_API_SECRET: ${apiSecret.substring(0, 6)}***`);
+console.log(`✅ CLOUDINARY_CLOUD_NAME: present`);
+console.log(`✅ CLOUDINARY_API_KEY: present`);
+console.log(`✅ CLOUDINARY_API_SECRET: present`);
 
 // Configure Cloudinary
 console.log('\n2️⃣ Configuring Cloudinary SDK:');

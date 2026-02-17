@@ -1,6 +1,5 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { Role } from '@prisma/client';
-import { AuthRequest } from './auth.middleware';
 
 /**
  * Agent Role Guard Middleware
@@ -9,22 +8,25 @@ import { AuthRequest } from './auth.middleware';
  * Must be used AFTER authMiddleware.
  *
  * SECURITY: This is a READ-ONLY guard - agents cannot perform mutations.
+ * Typed as RequestHandler for router.use() compatibility.
  */
-export const requireAgent = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const requireAgent: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
   // Verify authentication exists
   if (!req.user) {
-    return res.status(401).json({
+    res.status(401).json({
       success: false,
       message: 'Authentication required'
     });
+    return;
   }
 
   // Verify AGENT role
   if (req.user.role !== Role.AGENT) {
-    return res.status(403).json({
+    res.status(403).json({
       success: false,
       message: 'Agent access required'
     });
+    return;
   }
   next();
 };
@@ -36,13 +38,15 @@ export const requireAgent = (req: AuthRequest, res: Response, next: NextFunction
  * The agentId in the query MUST match the authenticated user's ID.
  *
  * This prevents agents from querying other agents' assignments.
+ * Typed as RequestHandler for router.use() compatibility.
  */
-export const enforceAgentSelfQuery = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const enforceAgentSelfQuery: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
   if (!req.user) {
-    return res.status(401).json({
+    res.status(401).json({
       success: false,
       message: 'Authentication required'
     });
+    return;
   }
 
   // Agent can only query their own data

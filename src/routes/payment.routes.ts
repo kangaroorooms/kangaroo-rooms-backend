@@ -12,11 +12,11 @@ const subscriptionService = new TenantSubscriptionService(tenantSubscriptionRepo
 const paymentController = new PaymentController(subscriptionService, paymentRepository);
 
 // Create Razorpay order
-router.post('/initiate', authMiddleware, (req, res, next) => paymentController.createOrder(req, res, next));
+router.post('/initiate', authMiddleware, (req, res, next) => paymentController.createOrder(req as any, res, next));
 
 // Verify payment + activate subscription
-router.post('/verify', authMiddleware, (req, res, next) => paymentController.verifyPayment(req, res, next));
+router.post('/verify', authMiddleware, (req, res, next) => paymentController.verifyPayment(req as any, res, next));
 
 // Payment history
-router.get('/history', authMiddleware, (req, res, next) => paymentController.getPaymentHistory(req, res, next));
+router.get('/history', authMiddleware, (req, res, next) => paymentController.getPaymentHistory(req as any, res, next));
 export default router;

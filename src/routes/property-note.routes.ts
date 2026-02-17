@@ -89,10 +89,10 @@ export const propertyNotesRouter = Router({
 propertyNotesRouter.use(authMiddleware);
 
 // POST /api/properties/:propertyId/notes - Create a note
-propertyNotesRouter.post('/', propertyNoteController.createNote);
+propertyNotesRouter.post('/', (req, res, next) => propertyNoteController.createNote(req as any, res));
 
 // GET /api/properties/:propertyId/notes - Get all notes for a property
-propertyNotesRouter.get('/', propertyNoteController.getNotes);
+propertyNotesRouter.get('/', (req, res, next) => propertyNoteController.getNotes(req as any, res));
 
 // ============================================================================
 // NOTE-SCOPED ROUTES
@@ -112,10 +112,10 @@ export const notesRouter = Router();
 notesRouter.use(authMiddleware);
 
 // PATCH /api/notes/:noteId - Update a note
-notesRouter.patch('/:noteId', propertyNoteController.updateNote);
+notesRouter.patch('/:noteId', (req, res, next) => propertyNoteController.updateNote(req as any, res));
 
 // DELETE /api/notes/:noteId - Soft delete a note
-notesRouter.delete('/:noteId', propertyNoteController.deleteNote);
+notesRouter.delete('/:noteId', (req, res, next) => propertyNoteController.deleteNote(req as any, res));
 
 // Default export for backward compatibility
 export default router;

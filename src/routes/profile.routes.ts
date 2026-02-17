@@ -29,7 +29,7 @@ const profileController = new ProfileController();
  *       200:
  *         description: User profile
  */
-router.get('/', authMiddleware, profileController.getProfile);
+router.get('/', authMiddleware, (req, res, next) => profileController.getProfile(req as any, res));
 
 /**
  * @swagger
@@ -40,5 +40,5 @@ router.get('/', authMiddleware, profileController.getProfile);
  *     security:
  *       - bearerAuth: []
  */
-router.put('/', authMiddleware, validateBody(UpdateProfileSchema), profileController.updateProfile);
+router.put('/', authMiddleware, validateBody(UpdateProfileSchema), (req, res, next) => profileController.updateProfile(req as any, res));
 export default router;

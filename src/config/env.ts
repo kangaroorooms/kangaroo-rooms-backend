@@ -28,20 +28,23 @@ export const env = {
   IS_PROD,
   PORT: Number(process.env.PORT || 3001),
   // Database
-  DATABASE_URL: IS_PROD ? requireEnv('DATABASE_URL') : process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/kangaroo_rooms',
-  // Redis
-  REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
-  REDIS_ENABLED: process.env.REDIS_ENABLED !== 'false',
-  // Enabled by default; set to "false" to disable
+  DATABASE_URL: IS_PROD ?
+  requireEnv('DATABASE_URL') :
+  process.env.DATABASE_URL ||
+  'postgresql://user:password@localhost:5432/kangaroo_rooms',
   // JWT
-  JWT_SECRET: IS_PROD ? requireEnv('JWT_SECRET') : process.env.JWT_SECRET || 'dev-secret',
+  JWT_SECRET: IS_PROD ?
+  requireEnv('JWT_SECRET') :
+  process.env.JWT_SECRET || 'dev-secret',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   // Security
-  CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  CORS_ORIGIN: process.env.CORS_ORIGIN || '',
   // Feature flags
   ENABLE_SWAGGER: process.env.ENABLE_SWAGGER !== 'false',
-  ENABLE_PAYMENT_VERIFICATION: process.env.ENABLE_PAYMENT_VERIFICATION === 'true',
-  ENABLE_PAYMENT_CONFIRMATION: process.env.ENABLE_PAYMENT_CONFIRMATION === 'true',
+  ENABLE_PAYMENT_VERIFICATION:
+  process.env.ENABLE_PAYMENT_VERIFICATION === 'true',
+  ENABLE_PAYMENT_CONFIRMATION:
+  process.env.ENABLE_PAYMENT_CONFIRMATION === 'true',
   // Razorpay
   RAZORPAY: {
     KEY_ID: process.env.RAZORPAY_KEY_ID || '',
@@ -63,7 +66,9 @@ export const env = {
 if (IS_PROD) {
   // JWT safety
   if (env.JWT_SECRET.length < 32) {
-    throw new Error('❌ JWT_SECRET must be at least 32 characters in production');
+    throw new Error(
+      '❌ JWT_SECRET must be at least 32 characters in production'
+    );
   }
 
   // CORS
@@ -82,13 +87,12 @@ if (IS_PROD) {
   }
 
   // Cloudinary validation
-  if (!env.CLOUDINARY.CLOUD_NAME || !env.CLOUDINARY.API_KEY || !env.CLOUDINARY.API_SECRET) {
+  if (
+  !env.CLOUDINARY.CLOUD_NAME ||
+  !env.CLOUDINARY.API_KEY ||
+  !env.CLOUDINARY.API_SECRET)
+  {
     throw new Error('❌ Cloudinary credentials missing in production');
-  }
-
-  // Redis validation (warn, don't crash — system degrades gracefully)
-  if (env.REDIS_ENABLED && !env.REDIS_URL) {
-    console.warn('⚠️ REDIS_ENABLED=true but REDIS_URL is not set. Idempotency will use DB-only mode.');
   }
 }
 

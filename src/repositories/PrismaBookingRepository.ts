@@ -1,19 +1,10 @@
 import { IBookingRepository } from './interfaces';
 import { Booking, BookingStatus } from '../models/Booking';
 import { getPrismaClient } from '../utils/prisma';
-import {
-  NotFoundError,
-  DuplicateBookingError,
-  BusinessLogicError,
-  mapPrismaError } from
-'../errors/AppErrors';
+import { NotFoundError, DuplicateBookingError, BusinessLogicError, mapPrismaError } from '../errors/AppErrors';
 import { logger } from '../utils/logger';
 import { writeOutboxEvent } from '../services/OutboxWriter';
-import {
-  OutboxAggregateType,
-  OutboxEventType,
-  BookingCreatedPayload } from
-'../services/OutboxEventTypes';
+import { OutboxAggregateType, OutboxEventType, BookingCreatedPayload } from '../services/OutboxEventTypes';
 
 /**
  * PRODUCTION-GRADE Prisma Booking Repository
@@ -56,17 +47,12 @@ export class PrismaBookingRepository implements IBookingRepository {
     });
     return bookings.map(this.toDomain);
   }
-  async findByOwnerId(
-  ownerId: string,
-  page: number = 1,
-  limit: number = 20)
-  : Promise<{
+  async findByOwnerId(ownerId: string, page: number = 1, limit: number = 20): Promise<{
     bookings: Booking[];
     total: number;
   }> {
     const skip = (page - 1) * limit;
-    const [bookings, total] = await Promise.all([
-    this.prisma.booking.findMany({
+    const [bookings, total] = await Promise.all([this.prisma.booking.findMany({
       where: {
         ownerId
       },
@@ -75,29 +61,22 @@ export class PrismaBookingRepository implements IBookingRepository {
       orderBy: {
         createdAt: 'desc'
       }
-    }),
-    this.prisma.booking.count({
+    }), this.prisma.booking.count({
       where: {
         ownerId
       }
-    })]
-    );
+    })]);
     return {
       bookings: bookings.map(this.toDomain),
       total
     };
   }
-  async findByTenantId(
-  tenantId: string,
-  page: number = 1,
-  limit: number = 20)
-  : Promise<{
+  async findByTenantId(tenantId: string, page: number = 1, limit: number = 20): Promise<{
     bookings: Booking[];
     total: number;
   }> {
     const skip = (page - 1) * limit;
-    const [bookings, total] = await Promise.all([
-    this.prisma.booking.findMany({
+    const [bookings, total] = await Promise.all([this.prisma.booking.findMany({
       where: {
         tenantId
       },
@@ -106,21 +85,17 @@ export class PrismaBookingRepository implements IBookingRepository {
       orderBy: {
         createdAt: 'desc'
       }
-    }),
-    this.prisma.booking.count({
+    }), this.prisma.booking.count({
       where: {
         tenantId
       }
-    })]
-    );
+    })]);
     return {
       bookings: bookings.map(this.toDomain),
       total
     };
   }
-  async create(
-  booking: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>)
-  : Promise<Booking> {
+  async create(booking: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>): Promise<Booking> {
     try {
       const created = await this.prisma.booking.create({
         data: {
@@ -173,113 +148,108 @@ export class PrismaBookingRepository implements IBookingRepository {
     message: string | null;
   }): Promise<Booking> {
     try {
-      const result = await this.prisma.$transaction(
-        async (tx: any) => {
-          // STEP 1: Verify room exists and is active
-          const room = await tx.room.findUnique({
-            where: {
-              id: bookingData.roomId
-            },
-            select: {
-              id: true,
-              isActive: true,
-              ownerId: true,
-              title: true,
-              city: true
-            }
-          });
-          if (!room) {
-            throw new NotFoundError('Room', bookingData.roomId);
+      const result = await this.prisma.$transaction(async (tx: any) => {
+        // STEP 1: Verify room exists and is active
+        const room = await tx.room.findUnique({
+          where: {
+            id: bookingData.roomId
+          },
+          select: {
+            id: true,
+            isActive: true,
+            ownerId: true,
+            title: true,
+            city: true
           }
-          if (!room.isActive) {
-            throw new BusinessLogicError(
-              'Room is not currently available for booking'
-            );
+        });
+        if (!room) {
+          throw new NotFoundError('Room', bookingData.roomId);
+        }
+        if (!room.isActive) {
+          throw new BusinessLogicError('Room is not currently available for booking');
+        }
+
+        // STEP 2: Verify owner exists
+        const owner = await tx.user.findUnique({
+          where: {
+            id: room.ownerId
+          },
+          select: {
+            id: true,
+            name: true
           }
+        });
+        if (!owner) {
+          throw new NotFoundError('Room owner');
+        }
 
-          // STEP 2: Verify owner exists
-          const owner = await tx.user.findUnique({
-            where: {
-              id: room.ownerId
-            },
-            select: {
-              id: true,
-              name: true
+        // STEP 3: Check for duplicate ACTIVE booking (same tenant + same room)
+        // Lead-based model: one active booking per tenant per property.
+        // Tenant can retry after rejection. Multiple tenants can book same property.
+        const existingBooking = await tx.booking.findFirst({
+          where: {
+            roomId: bookingData.roomId,
+            tenantEmail: bookingData.tenantEmail.toLowerCase(),
+            status: {
+              in: ['PENDING', 'APPROVED']
             }
-          });
-          if (!owner) {
-            throw new NotFoundError('Room owner');
           }
+        });
+        if (existingBooking) {
+          throw new DuplicateBookingError();
+        }
 
-          // STEP 3: Check for duplicate ACTIVE booking (same tenant + same room)
-          // Lead-based model: one active booking per tenant per property.
-          // Tenant can retry after rejection. Multiple tenants can book same property.
-          const existingBooking = await tx.booking.findFirst({
-            where: {
-              roomId: bookingData.roomId,
-              tenantEmail: bookingData.tenantEmail.toLowerCase(),
-              status: {
-                in: ['PENDING', 'APPROVED']
-              }
-            }
-          });
-          if (existingBooking) {
-            throw new DuplicateBookingError();
-          }
-
-          // STEP 4: Create booking atomically
-          const normalizedDate = new Date(bookingData.moveInDate);
-          normalizedDate.setUTCHours(0, 0, 0, 0);
-          const booking = await tx.booking.create({
-            data: {
-              roomId: bookingData.roomId,
-              ownerId: room.ownerId,
-              tenantId: bookingData.tenantId,
-              tenantName: bookingData.tenantName,
-              tenantEmail: bookingData.tenantEmail.toLowerCase(),
-              tenantPhone: bookingData.tenantPhone,
-              moveInDate: normalizedDate,
-              message: bookingData.message,
-              status: 'PENDING'
-            }
-          });
-
-          // ★ STEP 5: Write BOOKING_CREATED outbox event (SAME TRANSACTION)
-          // This is the key to eliminating ghost bookings.
-          // If this transaction commits, the event is guaranteed to exist.
-          // The outbox worker will pick it up and send the notification.
-          const outboxPayload: BookingCreatedPayload = {
-            bookingId: booking.id,
-            roomId: room.id,
-            roomTitle: room.title,
-            roomCity: room.city,
+        // STEP 4: Create booking atomically
+        const normalizedDate = new Date(bookingData.moveInDate);
+        normalizedDate.setUTCHours(0, 0, 0, 0);
+        const booking = await tx.booking.create({
+          data: {
+            roomId: bookingData.roomId,
             ownerId: room.ownerId,
-            ownerName: owner.name,
             tenantId: bookingData.tenantId,
             tenantName: bookingData.tenantName,
             tenantEmail: bookingData.tenantEmail.toLowerCase(),
             tenantPhone: bookingData.tenantPhone,
-            moveInDate: normalizedDate.toISOString(),
+            moveInDate: normalizedDate,
             message: bookingData.message,
-            status: 'PENDING',
-            createdAt: booking.createdAt.toISOString()
-          };
-          await writeOutboxEvent(tx, {
-            aggregateType: OutboxAggregateType.BOOKING,
-            aggregateId: booking.id,
-            eventType: OutboxEventType.BOOKING_CREATED,
-            payload: outboxPayload
-          });
-          return {
-            booking,
-            room
-          };
-        },
-        {
-          isolationLevel: 'Serializable',
-          timeout: 10000
-        }
-      );
+            status: 'PENDING'
+          }
+        });
+
+        // ★ STEP 5: Write BOOKING_CREATED outbox event (SAME TRANSACTION)
+        // This is the key to eliminating ghost bookings.
+        // If this transaction commits, the event is guaranteed to exist.
+        // The outbox worker will pick it up and send the notification.
+        const outboxPayload: BookingCreatedPayload = {
+          bookingId: booking.id,
+          roomId: room.id,
+          roomTitle: room.title,
+          roomCity: room.city,
+          ownerId: room.ownerId,
+          ownerName: owner.name,
+          tenantId: bookingData.tenantId,
+          tenantName: bookingData.tenantName,
+          tenantEmail: bookingData.tenantEmail.toLowerCase(),
+          tenantPhone: bookingData.tenantPhone,
+          moveInDate: normalizedDate.toISOString(),
+          message: bookingData.message,
+          status: 'PENDING',
+          createdAt: booking.createdAt.toISOString()
+        };
+        await writeOutboxEvent(tx, {
+          aggregateType: OutboxAggregateType.BOOKING,
+          aggregateId: booking.id,
+          eventType: OutboxEventType.BOOKING_CREATED,
+          payload: outboxPayload
+        });
+        return {
+          booking,
+          room
+        };
+      }, {
+        isolationLevel: 'Serializable',
+        timeout: 10000
+      });
       logger.info('Booking created via transaction (with outbox event)', {
         bookingId: result.booking.id,
         roomId: result.room.id,
@@ -331,11 +301,7 @@ export class PrismaBookingRepository implements IBookingRepository {
    * OPTIMISTIC LOCK UPDATE — Only updates if current status matches expectedStatus.
    * Returns null if 0 rows affected (concurrent modification detected).
    */
-  async updateWithOptimisticLock(
-  id: string,
-  expectedStatus: string,
-  data: Partial<Booking>)
-  : Promise<Booking | null> {
+  async updateWithOptimisticLock(id: string, expectedStatus: string, data: Partial<Booking>): Promise<Booking | null> {
     try {
       // updateMany allows WHERE on non-unique fields; returns count
       const result = await this.prisma.booking.updateMany({
@@ -392,22 +358,11 @@ export class PrismaBookingRepository implements IBookingRepository {
       tenantName: prismaBooking.tenantName,
       tenantEmail: prismaBooking.tenantEmail,
       tenantPhone: prismaBooking.tenantPhone,
-      moveInDate:
-      prismaBooking.moveInDate instanceof Date ?
-      prismaBooking.moveInDate.toISOString() :
-      prismaBooking.moveInDate,
+      moveInDate: prismaBooking.moveInDate instanceof Date ? prismaBooking.moveInDate.toISOString() : prismaBooking.moveInDate,
       message: prismaBooking.message,
-      status: (typeof prismaBooking.status === 'string' ?
-      prismaBooking.status.toLowerCase() :
-      prismaBooking.status) as BookingStatus,
-      createdAt:
-      prismaBooking.createdAt instanceof Date ?
-      prismaBooking.createdAt.toISOString() :
-      prismaBooking.createdAt,
-      updatedAt:
-      prismaBooking.updatedAt instanceof Date ?
-      prismaBooking.updatedAt.toISOString() :
-      prismaBooking.updatedAt
+      status: (typeof prismaBooking.status === 'string' ? prismaBooking.status.toLowerCase() : prismaBooking.status) as BookingStatus,
+      createdAt: prismaBooking.createdAt instanceof Date ? prismaBooking.createdAt.toISOString() : prismaBooking.createdAt,
+      updatedAt: prismaBooking.updatedAt instanceof Date ? prismaBooking.updatedAt.toISOString() : prismaBooking.updatedAt
     };
   }
 }

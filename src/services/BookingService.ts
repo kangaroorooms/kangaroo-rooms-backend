@@ -1,20 +1,10 @@
 import { IBookingRepository } from '../repositories/interfaces';
 import { IRoomRepository } from '../repositories/interfaces';
-import {
-  NotFoundError,
-  ForbiddenError,
-  InvalidStatusTransitionError,
-  BusinessLogicError,
-  InvalidDateError } from
-'../errors/AppErrors';
+import { NotFoundError, ForbiddenError, InvalidStatusTransitionError, BusinessLogicError, InvalidDateError } from '../errors/AppErrors';
 import { logger } from '../utils/logger';
 import { getPrismaClient } from '../utils/prisma';
 import { writeOutboxEvent } from './OutboxWriter';
-import {
-  OutboxAggregateType,
-  OutboxEventType,
-  BookingStatusChangedPayload } from
-'./OutboxEventTypes';
+import { OutboxAggregateType, OutboxEventType, BookingStatusChangedPayload } from './OutboxEventTypes';
 
 /**
  * PRODUCTION-GRADE BOOKING SERVICE
@@ -30,10 +20,7 @@ import {
 export class BookingService {
   private bookingRepository: IBookingRepository;
   private roomRepository: IRoomRepository;
-  constructor(
-  bookingRepository: IBookingRepository,
-  roomRepository: IRoomRepository)
-  {
+  constructor(bookingRepository: IBookingRepository, roomRepository: IRoomRepository) {
     this.bookingRepository = bookingRepository;
     this.roomRepository = roomRepository;
 
@@ -116,17 +103,11 @@ export class BookingService {
   private normalizeMoveInDate(dateString: string): Date {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) {
-      throw new InvalidDateError(
-        `Invalid date: "${dateString}". Use ISO 8601 format (YYYY-MM-DD).`
-      );
+      throw new InvalidDateError(`Invalid date: "${dateString}". Use ISO 8601 format (YYYY-MM-DD).`);
     }
-    const normalized = new Date(
-      Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
-    );
+    const normalized = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const today = new Date();
-    const todayNormalized = new Date(
-      Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
-    );
+    const todayNormalized = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
     if (normalized < todayNormalized) {
       throw new InvalidDateError('Move-in date must be today or in the future');
     }
@@ -153,11 +134,7 @@ export class BookingService {
    *
    * If any step fails, entire transaction rolls back. Zero silent status changes.
    */
-  async updateBookingStatus(
-  bookingId: string,
-  status: string,
-  userId?: string)
-  {
+  async updateBookingStatus(bookingId: string, status: string, userId?: string) {
     const booking = await this.bookingRepository.findById(bookingId);
     if (!booking) {
       throw new NotFoundError('Booking', bookingId);
@@ -165,9 +142,7 @@ export class BookingService {
 
     // Verify caller is the room owner
     if (userId && booking.ownerId !== userId) {
-      throw new ForbiddenError(
-        'Only the property owner can update booking status'
-      );
+      throw new ForbiddenError('Only the property owner can update booking status');
     }
 
     // Validate status transitions
@@ -184,56 +159,51 @@ export class BookingService {
 
     // Atomic: status update + outbox event in single transaction
     const prisma = getPrismaClient();
-    const result = await prisma.$transaction(
-      async (tx: any) => {
-        // Optimistic lock: only update if status hasn't changed since we read it
-        const updateResult = await tx.booking.updateMany({
-          where: {
-            id: bookingId,
-            status: currentStatus as any
-          },
-          data: {
-            status: newStatus as any
-          }
-        });
-        if (updateResult.count === 0) {
-          throw new BusinessLogicError(
-            'Booking was modified concurrently. Please retry.'
-          );
+    const result = await prisma.$transaction(async (tx: any) => {
+      // Optimistic lock: only update if status hasn't changed since we read it
+      const updateResult = await tx.booking.updateMany({
+        where: {
+          id: bookingId,
+          status: currentStatus as any
+        },
+        data: {
+          status: newStatus as any
         }
-
-        // Write BOOKING_STATUS_CHANGED outbox event atomically
-        const outboxPayload: BookingStatusChangedPayload = {
-          bookingId: booking.id,
-          roomId: booking.roomId,
-          ownerId: booking.ownerId,
-          tenantId: booking.tenantId || null,
-          tenantEmail: booking.tenantEmail,
-          previousStatus: currentStatus,
-          newStatus: newStatus,
-          changedBy: userId || 'SYSTEM',
-          changedAt: new Date().toISOString()
-        };
-        await writeOutboxEvent(tx, {
-          aggregateType: OutboxAggregateType.BOOKING,
-          aggregateId: booking.id,
-          eventType: OutboxEventType.BOOKING_STATUS_CHANGED,
-          payload: outboxPayload
-        });
-
-        // Fetch updated booking
-        const updated = await tx.booking.findUnique({
-          where: {
-            id: bookingId
-          }
-        });
-        return updated;
-      },
-      {
-        isolationLevel: 'Serializable',
-        timeout: 10000
+      });
+      if (updateResult.count === 0) {
+        throw new BusinessLogicError('Booking was modified concurrently. Please retry.');
       }
-    );
+
+      // Write BOOKING_STATUS_CHANGED outbox event atomically
+      const outboxPayload: BookingStatusChangedPayload = {
+        bookingId: booking.id,
+        roomId: booking.roomId,
+        ownerId: booking.ownerId,
+        tenantId: booking.tenantId || null,
+        tenantEmail: booking.tenantEmail,
+        previousStatus: currentStatus,
+        newStatus: newStatus,
+        changedBy: userId || 'SYSTEM',
+        changedAt: new Date().toISOString()
+      };
+      await writeOutboxEvent(tx, {
+        aggregateType: OutboxAggregateType.BOOKING,
+        aggregateId: booking.id,
+        eventType: OutboxEventType.BOOKING_STATUS_CHANGED,
+        payload: outboxPayload
+      });
+
+      // Fetch updated booking
+      const updated = await tx.booking.findUnique({
+        where: {
+          id: bookingId
+        }
+      });
+      return updated;
+    }, {
+      isolationLevel: 'Serializable',
+      timeout: 10000
+    });
     if (!result) {
       throw new BusinessLogicError('Failed to update booking status.');
     }
@@ -250,23 +220,11 @@ export class BookingService {
       tenantName: result.tenantName,
       tenantEmail: result.tenantEmail,
       tenantPhone: result.tenantPhone,
-      moveInDate:
-      result.moveInDate instanceof Date ?
-      result.moveInDate.toISOString() :
-      result.moveInDate,
+      moveInDate: result.moveInDate instanceof Date ? result.moveInDate.toISOString() : result.moveInDate,
       message: result.message,
-      status:
-      typeof result.status === 'string' ?
-      result.status.toLowerCase() :
-      result.status,
-      createdAt:
-      result.createdAt instanceof Date ?
-      result.createdAt.toISOString() :
-      result.createdAt,
-      updatedAt:
-      result.updatedAt instanceof Date ?
-      result.updatedAt.toISOString() :
-      result.updatedAt
+      status: typeof result.status === 'string' ? result.status.toLowerCase() : result.status,
+      createdAt: result.createdAt instanceof Date ? result.createdAt.toISOString() : result.createdAt,
+      updatedAt: result.updatedAt instanceof Date ? result.updatedAt.toISOString() : result.updatedAt
     };
   }
 
@@ -284,17 +242,11 @@ export class BookingService {
     if (booking.status.toUpperCase() !== 'PENDING') {
       throw new BusinessLogicError('Only pending bookings can be cancelled');
     }
-    const result = await this.bookingRepository.updateWithOptimisticLock(
-      bookingId,
-      'PENDING',
-      {
-        status: 'REJECTED'
-      }
-    );
+    const result = await this.bookingRepository.updateWithOptimisticLock(bookingId, 'PENDING', {
+      status: 'REJECTED'
+    });
     if (!result) {
-      throw new BusinessLogicError(
-        'Booking was modified concurrently. Please retry.'
-      );
+      throw new BusinessLogicError('Booking was modified concurrently. Please retry.');
     }
     return result;
   }

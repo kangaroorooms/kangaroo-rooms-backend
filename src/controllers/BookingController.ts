@@ -11,11 +11,7 @@ export class BookingController {
    * FIX: Use handleError (which checks errors/AppErrors.ts) instead of next()
    *      which delegates to error.middleware.ts with a DIFFERENT AppError class.
    */
-  createBooking = async (
-  req: Request,
-  res: Response,
-  next: NextFunction)
-  : Promise<void> => {
+  createBooking = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = (req as AuthRequest).user?.userId;
       const bookingData = {
@@ -42,7 +38,9 @@ export class BookingController {
    */
   getBookingById = async (req: AuthRequest, res: Response) => {
     try {
-      const { id } = req.params;
+      const {
+        id
+      } = req.params;
       const userId = req.user?.userId;
       const userRole = req.user?.role;
       const booking = await this.bookingService.getBookingById(id);
@@ -54,11 +52,7 @@ export class BookingController {
       }
 
       // SECURITY FIX: Only allow access to own bookings or admin
-      if (
-      userRole !== 'ADMIN' &&
-      booking.tenantId !== userId &&
-      booking.ownerId !== userId)
-      {
+      if (userRole !== 'ADMIN' && booking.tenantId !== userId && booking.ownerId !== userId) {
         return res.status(403).json({
           success: false,
           message: 'You do not have permission to view this booking'
@@ -78,7 +72,9 @@ export class BookingController {
    */
   cancelBooking = async (req: AuthRequest, res: Response) => {
     try {
-      const { id } = req.params;
+      const {
+        id
+      } = req.params;
       const userId = req.user?.userId;
       if (!userId) {
         return res.status(401).json({
@@ -160,8 +156,12 @@ export class BookingController {
    */
   updateBookingStatus = async (req: AuthRequest, res: Response) => {
     try {
-      const { id } = req.params;
-      const { status } = req.body;
+      const {
+        id
+      } = req.params;
+      const {
+        status
+      } = req.body;
       const userId = req.user?.userId;
       if (!userId) {
         return res.status(401).json({
@@ -169,11 +169,7 @@ export class BookingController {
           message: 'User not authenticated'
         });
       }
-      const booking = await this.bookingService.updateBookingStatus(
-        id,
-        status,
-        userId
-      );
+      const booking = await this.bookingService.updateBookingStatus(id, status, userId);
       return res.json({
         success: true,
         data: booking ? this.sanitizeBooking(booking) : null,
@@ -205,10 +201,7 @@ export class BookingController {
     });
     return res.status(500).json({
       success: false,
-      message:
-      process.env.NODE_ENV === 'production' ?
-      'Internal server error' :
-      error.message
+      message: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
     });
   }
 
@@ -227,10 +220,7 @@ export class BookingController {
     tenantPhone: booking.tenantPhone,
     moveInDate: booking.moveInDate,
     message: booking.message || null,
-    status:
-    typeof booking.status === 'string' ?
-    booking.status.toLowerCase() :
-    booking.status,
+    status: typeof booking.status === 'string' ? booking.status.toLowerCase() : booking.status,
     createdAt: booking.createdAt,
     updatedAt: booking.updatedAt
   });

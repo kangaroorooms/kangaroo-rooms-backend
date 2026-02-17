@@ -18,7 +18,7 @@ export interface Room {
   rating: number;
   reviewsCount: number;
   isPopular: boolean;
-  isVerified: boolean;
+  isVerified?: boolean;
   isActive: boolean;
   ownerId: string;
   createdAt: string;

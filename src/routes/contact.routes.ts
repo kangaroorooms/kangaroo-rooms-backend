@@ -16,7 +16,7 @@ const contactController = new ContactController(contactService);
  * Returns owner contact if previously unlocked OR paid subscription active
  * Returns 403 CONTACT_LOCKED otherwise
  */
-router.get('/:roomId', authMiddleware, authorizeRoles(Role.TENANT), (req, res) => contactController.readContact(req, res));
+router.get('/:roomId', authMiddleware, authorizeRoles(Role.TENANT), (req, res, next) => contactController.readContact(req as any, res));
 
 /**
  * POST /api/contacts/unlock
@@ -25,5 +25,5 @@ router.get('/:roomId', authMiddleware, authorizeRoles(Role.TENANT), (req, res) =
  * Returns: { ownerName, ownerPhone, ownerEmail }
  * ⚠️ WRITE path — SERIALIZABLE transaction, limit enforcement, dedup
  */
-router.post('/unlock', authMiddleware, authorizeRoles(Role.TENANT), (req, res) => contactController.unlockContact(req, res));
+router.post('/unlock', authMiddleware, authorizeRoles(Role.TENANT), (req, res, next) => contactController.unlockContact(req as any, res));
 export default router;

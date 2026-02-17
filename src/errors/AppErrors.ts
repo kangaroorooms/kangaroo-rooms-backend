@@ -38,13 +38,13 @@ export class InvalidDateError extends AppError {
 }
 export class IdempotencyConflictError extends AppError {
   constructor(message: string = 'Idempotency key reused with different payload') {
-    super(message, 409);
+    super(409, message, 'IDEMPOTENCY_CONFLICT');
     this.name = 'IdempotencyConflictError';
   }
 }
 export class IdempotencyKeyMissingError extends AppError {
   constructor(message: string = 'Idempotency-Key header is required') {
-    super(message, 400);
+    super(400, message, 'IDEMPOTENCY_KEY_MISSING');
     this.name = 'IdempotencyKeyMissingError';
   }
 }

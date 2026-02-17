@@ -3,8 +3,8 @@ import { getPrismaClient } from '../utils/prisma';
 import { logger } from '../utils/logger';
 export class PrismaUserRepository {
   private prisma: PrismaClient;
-  constructor() {
-    this.prisma = getPrismaClient();
+  constructor(prismaClient?: PrismaClient) {
+    this.prisma = prismaClient || getPrismaClient();
   }
   async create(data: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<User> {
     try {

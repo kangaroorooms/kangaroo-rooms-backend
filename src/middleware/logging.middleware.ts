@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { logger } from '../utils/logger';
 
 /**
@@ -7,7 +8,7 @@ import { logger } from '../utils/logger';
  */
 export function requestLogger(req: Request, res: Response, next: NextFunction) {
   const start = Date.now();
-  const requestId = Math.random().toString(36).substring(7)
+  const requestId = crypto.randomUUID()
 
   // Add request ID to request object for tracing
   ;

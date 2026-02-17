@@ -68,15 +68,15 @@ router.use(authMiddleware);
 
 // GET /api/notifications - Get all notifications for user
 // Query: ?unreadOnly=true to filter
-router.get('/', notificationController.getNotifications);
+router.get('/', (req, res, next) => notificationController.getNotifications(req as any, res));
 
 // GET /api/notifications/unread - Get unread count (lightweight for polling)
-router.get('/unread', notificationController.getUnreadCount);
+router.get('/unread', (req, res, next) => notificationController.getUnreadCount(req as any, res));
 
 // PATCH /api/notifications/read-all - Mark all as read
 // NOTE: This must come BEFORE /:id/read to avoid route conflict
-router.patch('/read-all', notificationController.markAllAsRead);
+router.patch('/read-all', (req, res, next) => notificationController.markAllAsRead(req as any, res));
 
 // PATCH /api/notifications/:id/read - Mark single notification as read
-router.patch('/:id/read', notificationController.markAsRead);
+router.patch('/:id/read', (req, res, next) => notificationController.markAsRead(req as any, res));
 export default router;

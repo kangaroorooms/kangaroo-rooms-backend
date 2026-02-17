@@ -22,28 +22,44 @@ const logger = pino({
 export const safeLogger = {
   info: (...args: any[]) => {
     try {
-      logger.info(...args);
+      if (args.length === 1) {
+        logger.info(args[0]);
+      } else {
+        logger.info(args[0], args[1]);
+      }
     } catch (error) {
       console.log('[INFO]', ...args);
     }
   },
   error: (...args: any[]) => {
     try {
-      logger.error(...args);
+      if (args.length === 1) {
+        logger.error(args[0]);
+      } else {
+        logger.error(args[0], args[1]);
+      }
     } catch (error) {
       console.error('[ERROR]', ...args);
     }
   },
   warn: (...args: any[]) => {
     try {
-      logger.warn(...args);
+      if (args.length === 1) {
+        logger.warn(args[0]);
+      } else {
+        logger.warn(args[0], args[1]);
+      }
     } catch (error) {
       console.warn('[WARN]', ...args);
     }
   },
   debug: (...args: any[]) => {
     try {
-      logger.debug(...args);
+      if (args.length === 1) {
+        logger.debug(args[0]);
+      } else {
+        logger.debug(args[0], args[1]);
+      }
     } catch (error) {
       console.debug('[DEBUG]', ...args);
     }

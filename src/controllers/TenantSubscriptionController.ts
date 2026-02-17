@@ -4,6 +4,7 @@ import { PlanLimitService } from '../services/PlanLimitService';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
 import { normalizeCity } from '../utils/normalize';
+import { getPrismaClient } from '../utils/prisma';
 export class TenantSubscriptionController {
   private planLimitService: PlanLimitService;
   constructor(private subscriptionService: TenantSubscriptionService, planLimitService?: PlanLimitService) {
@@ -179,12 +180,37 @@ export class TenantSubscriptionController {
           message: 'Plan and city are required'
         });
       }
+
+      // ✅ SECURITY FIX: Require payment verification for paid plans
+      if (plan.toUpperCase() !== 'FREE') {
+        if (!razorpay_payment_id) {
+          return res.status(400).json({
+            success: false,
+            message: 'Payment verification required. razorpay_payment_id is missing.'
+          });
+        }
+
+        // Verify payment exists and is VERIFIED in database
+        const prisma = getPrismaClient();
+        const payment = await prisma.payment.findFirst({
+          where: {
+            razorpayPaymentId: razorpay_payment_id,
+            status: 'VERIFIED'
+          }
+        });
+        if (!payment) {
+          return res.status(400).json({
+            success: false,
+            message: 'Payment verification required. Payment not found or not verified.'
+          });
+        }
+      }
       const normalizedCity = normalizeCity(city);
       const subscription = await this.subscriptionService.upgradeSubscription({
         userId,
         plan,
         city: normalizedCity,
-        paymentId: razorpay_payment_id || 'free'
+        paymentId: razorpay_payment_id
       });
       res.json({
         success: true,

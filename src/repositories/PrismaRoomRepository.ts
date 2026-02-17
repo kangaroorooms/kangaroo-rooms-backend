@@ -1,29 +1,74 @@
-import { PrismaClient, Room, Prisma, ReviewStatus } from '@prisma/client';
+import {
+  PrismaClient,
+  Room as PrismaRoom,
+  Prisma,
+  ReviewStatus } from
+'@prisma/client';
+import { Room as DomainRoom } from '../models/Room';
+import { IRoomRepository } from './interfaces';
 import { getPrismaClient } from '../utils/prisma';
 import { logger } from '../utils/logger';
-export class PrismaRoomRepository {
+export class PrismaRoomRepository implements IRoomRepository {
   private prisma: PrismaClient;
   constructor(prismaClient?: PrismaClient) {
     // Use provided client or get singleton
     this.prisma = prismaClient || getPrismaClient();
-    console.log('[PrismaRoomRepository] Initialized with Prisma client');
+  }
+
+  /**
+   * Map Prisma Room to domain Room type
+   */
+  private toDomain(r: PrismaRoom): DomainRoom {
+    return {
+      id: r.id,
+      title: r.title,
+      description: r.description || '',
+      city: r.city || '',
+      location: r.location,
+      landmark: r.landmark || '',
+      pricePerMonth: r.pricePerMonth,
+      roomType: r.roomType as DomainRoom['roomType'],
+      idealFor: (r.idealFor || []) as DomainRoom['idealFor'],
+      amenities: r.amenities || [],
+      images: r.images || [],
+      rating: r.rating || 0,
+      reviewsCount: r.reviewsCount || 0,
+      isPopular: r.isPopular || false,
+      isActive: r.isActive,
+      ownerId: r.ownerId,
+      createdAt:
+      r.createdAt instanceof Date ?
+      r.createdAt.toISOString() :
+      String(r.createdAt),
+      updatedAt:
+      r.updatedAt instanceof Date ?
+      r.updatedAt.toISOString() :
+      String(r.updatedAt)
+    };
   }
 
   /**
    * PRODUCTION-SAFE: Validate and normalize room data
    */
   private async normalizeAndValidateRoomData(data: any): Promise<any> {
-    console.log('[PrismaRoomRepository] Raw input data:', JSON.stringify(data, null, 2));
-
     // 1. VALIDATE REQUIRED FIELDS
-    const requiredFields = ['title', 'city', 'location', 'pricePerMonth', 'roomType', 'ownerId'];
+    const requiredFields = [
+    'title',
+    'city',
+    'location',
+    'pricePerMonth',
+    'roomType',
+    'ownerId'];
+
     for (const field of requiredFields) {
-      if (data[field] === undefined || data[field] === null || data[field] === '') {
-        console.error(`[PrismaRoomRepository] Missing required field: ${field}`);
+      if (
+      data[field] === undefined ||
+      data[field] === null ||
+      data[field] === '')
+      {
         throw new Error(`${field} is required`);
       }
     }
-    console.log('[PrismaRoomRepository] All required fields present');
 
     // 2. NORMALIZE STRING FIELDS (trim whitespace)
     const normalizedData = {
@@ -34,7 +79,11 @@ export class PrismaRoomRepository {
       landmark: data.landmark ? String(data.landmark).trim() : '',
       pricePerMonth: Number(data.pricePerMonth),
       roomType: data.roomType ? String(data.roomType).trim() : '',
-      idealFor: Array.isArray(data.idealFor) ? data.idealFor : data.idealFor ? [String(data.idealFor).trim()] : [],
+      idealFor: Array.isArray(data.idealFor) ?
+      data.idealFor :
+      data.idealFor ?
+      [String(data.idealFor).trim()] :
+      [],
       amenities: Array.isArray(data.amenities) ? data.amenities : [],
       images: Array.isArray(data.images) ? data.images : [],
       rating: 0,
@@ -44,17 +93,16 @@ export class PrismaRoomRepository {
       isActive: true,
       ownerId: data.ownerId
     };
-    console.log('[PrismaRoomRepository] Normalized data for Prisma:', JSON.stringify(normalizedData, null, 2));
     return normalizedData;
   }
-  async create(data: any): Promise<Room> {
+  async create(data: any): Promise<DomainRoom> {
     try {
-      console.log('[PrismaRoomRepository] ========== CREATE ROOM START ==========');
-      console.log('[PrismaRoomRepository] Input data:', JSON.stringify(data, null, 2));
+      logger.info('Creating room', {
+        ownerId: data.ownerId
+      });
 
       // Normalize and validate data
       const normalizedData = await this.normalizeAndValidateRoomData(data);
-      console.log('[PrismaRoomRepository] Calling Prisma create...');
 
       // Create room in database
       const room = await this.prisma.room.create({
@@ -68,27 +116,16 @@ export class PrismaRoomRepository {
           }
         }
       });
-      console.log('[PrismaRoomRepository] ✅ Room created successfully:', room.id);
-      console.log('[PrismaRoomRepository] ========== CREATE ROOM END ==========');
-      return room;
+      logger.info('Room created successfully', {
+        roomId: room.id
+      });
+      return this.toDomain(room);
     } catch (error: any) {
-      console.error('[PrismaRoomRepository] ========== CREATE ROOM ERROR ==========');
-      console.error('[PrismaRoomRepository] Error type:', error.constructor.name);
-      console.error('[PrismaRoomRepository] Error message:', error.message);
-      console.error('[PrismaRoomRepository] Error code:', error.code);
-      console.error('[PrismaRoomRepository] Full error:', error);
-      if (error.stack) {
-        console.error('[PrismaRoomRepository] Stack trace:', error.stack);
-      }
-
-      // Log Prisma-specific error details
-      if (error.meta) {
-        console.error('[PrismaRoomRepository] Prisma meta:', error.meta);
-      }
-      if (error.clientVersion) {
-        console.error('[PrismaRoomRepository] Prisma client version:', error.clientVersion);
-      }
-      console.error('[PrismaRoomRepository] ========================================');
+      logger.error('Error creating room', {
+        error: error.message,
+        code: error.code,
+        meta: error.meta
+      });
 
       // Re-throw validation errors as-is
       if (error.message && error.message.includes('is required')) {
@@ -100,7 +137,9 @@ export class PrismaRoomRepository {
         throw new Error('A property with this information already exists');
       }
       if (error.code === 'P2003') {
-        throw new Error(`Invalid reference: ${error.meta?.field_name || 'foreign key constraint failed'}`);
+        throw new Error(
+          `Invalid reference: ${error.meta?.field_name || 'foreign key constraint failed'}`
+        );
       }
       if (error.code === 'P2025') {
         throw new Error('Record not found');
@@ -115,7 +154,7 @@ export class PrismaRoomRepository {
       throw new Error(`Failed to create room: ${error.message}`);
     }
   }
-  async findById(id: string): Promise<Room | null> {
+  async findById(id: string): Promise<DomainRoom | null> {
     try {
       const room = await this.prisma.room.findUnique({
         where: {
@@ -130,7 +169,7 @@ export class PrismaRoomRepository {
           }
         }
       });
-      return room;
+      return room ? this.toDomain(room) : null;
     } catch (error: any) {
       logger.error('Error finding room by id', {
         error: error.message,
@@ -145,38 +184,46 @@ export class PrismaRoomRepository {
    * ✅ Uses Prisma.RoomWhereInput for compile-time validation
    * ✅ Removed isVerified (does not exist in schema)
    * ✅ Uses reviewStatus enum for verification filtering
+   * ✅ Maps Prisma types to domain Room via toDomain()
    */
   async findAll(filters?: any): Promise<{
-    rooms: Room[];
+    rooms: DomainRoom[];
     total: number;
   }> {
     try {
-      console.log('[PrismaRoomRepository] ========== FIND ALL START ==========');
-      console.log('[PrismaRoomRepository] Raw filters:', JSON.stringify(filters, null, 2));
-
       // ========== SAFE PAGINATION PARSING ==========
       const page = Math.max(parseInt(String(filters?.page)) || 1, 1);
-      const limit = Math.min(Math.max(parseInt(String(filters?.limit)) || 20, 1), 100);
+      const limit = Math.min(
+        Math.max(parseInt(String(filters?.limit)) || 20, 1),
+        100
+      );
       const skip = (page - 1) * limit;
-      console.log('[PrismaRoomRepository] Pagination:', {
-        page,
-        limit,
-        skip
-      });
 
       // ========== TYPE-SAFE WHERE CLAUSE ==========
       const where: Prisma.RoomWhereInput = {};
 
       // String filters
-      if (filters?.city && typeof filters.city === 'string' && filters.city.trim()) {
+      if (
+      filters?.city &&
+      typeof filters.city === 'string' &&
+      filters.city.trim())
+      {
         where.city = filters.city.trim();
       }
-      if (filters?.roomType && typeof filters.roomType === 'string' && filters.roomType.trim()) {
+      if (
+      filters?.roomType &&
+      typeof filters.roomType === 'string' &&
+      filters.roomType.trim())
+      {
         where.roomType = filters.roomType.trim();
       }
 
       // Numeric filters (price range)
-      if (filters?.minPrice !== undefined && filters?.minPrice !== '' && filters?.minPrice !== null) {
+      if (
+      filters?.minPrice !== undefined &&
+      filters?.minPrice !== '' &&
+      filters?.minPrice !== null)
+      {
         const minPrice = parseFloat(String(filters.minPrice));
         if (!isNaN(minPrice)) {
           where.pricePerMonth = {
@@ -185,7 +232,11 @@ export class PrismaRoomRepository {
           };
         }
       }
-      if (filters?.maxPrice !== undefined && filters?.maxPrice !== '' && filters?.maxPrice !== null) {
+      if (
+      filters?.maxPrice !== undefined &&
+      filters?.maxPrice !== '' &&
+      filters?.maxPrice !== null)
+      {
         const maxPrice = parseFloat(String(filters.maxPrice));
         if (!isNaN(maxPrice)) {
           where.pricePerMonth = {
@@ -197,28 +248,28 @@ export class PrismaRoomRepository {
 
       // Boolean filters
       if (filters?.isPopular !== undefined && filters?.isPopular !== '') {
-        where.isPopular = filters.isPopular === true || filters.isPopular === 'true';
+        where.isPopular =
+        filters.isPopular === true || filters.isPopular === 'true';
       }
       if (filters?.onlyActive !== undefined && filters?.onlyActive !== '') {
-        where.isActive = filters.onlyActive === true || filters.onlyActive === 'true';
+        where.isActive =
+        filters.onlyActive === true || filters.onlyActive === 'true';
       }
 
       // ✅ FIX: Use reviewStatus instead of isVerified (which doesn't exist)
-      // If isVerified filter is requested, map it to reviewStatus = APPROVED
       if (filters?.isVerified !== undefined && filters?.isVerified !== '') {
-        const isVerified = filters.isVerified === true || filters.isVerified === 'true';
+        const isVerified =
+        filters.isVerified === true || filters.isVerified === 'true';
         if (isVerified) {
           where.reviewStatus = ReviewStatus.APPROVED;
         }
       }
-      console.log('[PrismaRoomRepository] Where clause:', JSON.stringify(where, null, 2));
 
       // ========== EXECUTE QUERIES ==========
       const total = await this.prisma.room.count({
         where
       });
-      console.log('[PrismaRoomRepository] Total count:', total);
-      const rooms = await this.prisma.room.findMany({
+      const prismaRooms = await this.prisma.room.findMany({
         where,
         skip,
         take: limit,
@@ -234,24 +285,11 @@ export class PrismaRoomRepository {
           }
         }
       });
-      console.log('[PrismaRoomRepository] Rooms found:', rooms.length);
-      console.log('[PrismaRoomRepository] ========== FIND ALL SUCCESS ==========');
       return {
-        rooms,
+        rooms: prismaRooms.map((r) => this.toDomain(r)),
         total
       };
     } catch (error: any) {
-      console.error('[PrismaRoomRepository] ========== FIND ALL ERROR ==========');
-      console.error('[PrismaRoomRepository] Error type:', error.constructor.name);
-      console.error('[PrismaRoomRepository] Error message:', error.message);
-      console.error('[PrismaRoomRepository] Error code:', error.code);
-      if (error.meta) {
-        console.error('[PrismaRoomRepository] Prisma meta:', JSON.stringify(error.meta, null, 2));
-      }
-      if (error.stack) {
-        console.error('[PrismaRoomRepository] Stack:', error.stack);
-      }
-      console.error('[PrismaRoomRepository] ==========================================');
       logger.error('Error finding all rooms', {
         error: error.message,
         code: error.code,
@@ -260,7 +298,7 @@ export class PrismaRoomRepository {
       throw new Error(`Failed to find rooms: ${error.message}`);
     }
   }
-  async findByOwnerId(ownerId: string): Promise<Room[]> {
+  async findByOwnerId(ownerId: string): Promise<DomainRoom[]> {
     try {
       const rooms = await this.prisma.room.findMany({
         where: {
@@ -270,7 +308,7 @@ export class PrismaRoomRepository {
           createdAt: 'desc'
         }
       });
-      return rooms;
+      return rooms.map((r) => this.toDomain(r));
     } catch (error: any) {
       logger.error('Error finding rooms by owner', {
         error: error.message,
@@ -280,7 +318,7 @@ export class PrismaRoomRepository {
       throw new Error('Failed to find rooms');
     }
   }
-  async findByCity(city: string): Promise<Room[]> {
+  async findByCity(city: string): Promise<DomainRoom[]> {
     try {
       const rooms = await this.prisma.room.findMany({
         where: {
@@ -298,7 +336,7 @@ export class PrismaRoomRepository {
           }
         }
       });
-      return rooms;
+      return rooms.map((r) => this.toDomain(r));
     } catch (error: any) {
       logger.error('Error finding rooms by city', {
         error: error.message,
@@ -307,19 +345,25 @@ export class PrismaRoomRepository {
       throw new Error('Failed to find rooms');
     }
   }
-  async update(id: string, data: Partial<Room>): Promise<Room> {
+  async update(
+  id: string,
+  data: Partial<DomainRoom>)
+  : Promise<DomainRoom | null> {
     try {
-      const updateData = {
-        ...data
+      const { id: _id, ownerId, createdAt, updatedAt, ...rest } = data;
+      const safeUpdate: Prisma.RoomUpdateInput = {
+        ...rest
       };
       const room = await this.prisma.room.update({
         where: {
           id
         },
-        data: updateData
+        data: safeUpdate
       });
-      console.log(`[PrismaRoomRepository] Room ${id} updated`);
-      return room;
+      logger.info('Room updated', {
+        roomId: id
+      });
+      return this.toDomain(room);
     } catch (error: any) {
       logger.error('Error updating room', {
         error: error.message,
@@ -328,14 +372,14 @@ export class PrismaRoomRepository {
       throw new Error('Failed to update room');
     }
   }
-  async delete(id: string): Promise<Room> {
+  async delete(id: string): Promise<boolean> {
     try {
-      const room = await this.prisma.room.delete({
+      await this.prisma.room.delete({
         where: {
           id
         }
       });
-      return room;
+      return true;
     } catch (error: any) {
       logger.error('Error deleting room', {
         error: error.message,
@@ -344,7 +388,7 @@ export class PrismaRoomRepository {
       throw new Error('Failed to delete room');
     }
   }
-  async search(filters: any): Promise<Room[]> {
+  async search(filters: any): Promise<DomainRoom[]> {
     try {
       const where: Prisma.RoomWhereInput = {
         isActive: true
@@ -354,8 +398,10 @@ export class PrismaRoomRepository {
       }
       if (filters.minPrice || filters.maxPrice) {
         where.pricePerMonth = {};
-        if (filters.minPrice) (where.pricePerMonth as any).gte = Number(filters.minPrice);
-        if (filters.maxPrice) (where.pricePerMonth as any).lte = Number(filters.maxPrice);
+        if (filters.minPrice)
+        (where.pricePerMonth as any).gte = Number(filters.minPrice);
+        if (filters.maxPrice)
+        (where.pricePerMonth as any).lte = Number(filters.maxPrice);
       }
       if (filters.roomType) {
         where.roomType = filters.roomType;
@@ -374,7 +420,7 @@ export class PrismaRoomRepository {
           }
         }
       });
-      return rooms;
+      return rooms.map((r) => this.toDomain(r));
     } catch (error: any) {
       logger.error('Error searching rooms', {
         error: error.message,
@@ -383,7 +429,7 @@ export class PrismaRoomRepository {
       throw new Error('Failed to search rooms');
     }
   }
-  async toggleRoomStatus(id: string): Promise<Room | null> {
+  async toggleRoomStatus(id: string): Promise<DomainRoom | null> {
     const room = await this.prisma.room.findUnique({
       where: {
         id
@@ -401,6 +447,6 @@ export class PrismaRoomRepository {
         isActive: !room.isActive
       }
     });
-    return updatedRoom;
+    return updatedRoom ? this.toDomain(updatedRoom) : null;
   }
 }

@@ -14,51 +14,45 @@ router.use(requireAdmin);
 // ============================================================================
 
 // Dashboard Stats
-router.get('/stats', adminController.getStats);
+router.get('/stats', (req, res, next) => adminController.getStats(req as any, res));
 
 // Activity Log
-router.get('/activity', adminController.getActivity);
+router.get('/activity', (req, res, next) => adminController.getActivity(req as any, res));
 
 // ============================================================================
 // USER MANAGEMENT
 // ============================================================================
 
 // User Management
-router.get('/users', adminController.getAllUsers);
-router.patch('/users/:userId/status', adminController.updateUserStatus);
-router.get('/tenants', adminController.getTenants);
-router.get('/agents', adminController.getAgents);
+router.get('/users', (req, res, next) => adminController.getAllUsers(req as any, res));
+router.patch('/users/:userId/status', (req, res, next) => adminController.updateUserStatus(req as any, res));
+router.get('/tenants', (req, res, next) => adminController.getTenants(req as any, res));
+router.get('/agents', (req, res, next) => adminController.getAgents(req as any, res));
 
 // ============================================================================
 // PROPERTY MANAGEMENT
 // ============================================================================
 
 // Property Management
-router.get('/properties', adminController.getAllProperties);
-router.patch('/properties/:id/approve', adminController.approveProperty);
-router.patch('/properties/:id/reject', adminController.rejectProperty);
-router.patch('/properties/:id/needs-correction', adminController.requestCorrection);
-router.patch('/properties/:id/suspend', adminController.suspendProperty);
+router.get('/properties', (req, res, next) => adminController.getAllProperties(req as any, res));
+router.patch('/properties/:id/approve', (req, res, next) => adminController.approveProperty(req as any, res));
+router.patch('/properties/:id/reject', (req, res, next) => adminController.rejectProperty(req as any, res));
+router.patch('/properties/:id/needs-correction', (req, res, next) => adminController.requestCorrection(req as any, res));
+router.patch('/properties/:id/suspend', (req, res, next) => adminController.suspendProperty(req as any, res));
 
 // ============================================================================
 // AGENT ASSIGNMENT MANAGEMENT (NEW)
 // ============================================================================
 
 // Property Assignments
-// POST   /api/admin/agents/:agentId/properties/:propertyId - Assign property to agent
-// DELETE /api/admin/agents/:agentId/properties/:propertyId - Unassign property from agent
-router.post('/agents/:agentId/properties/:propertyId', adminAssignmentController.assignPropertyToAgent);
-router.delete('/agents/:agentId/properties/:propertyId', adminAssignmentController.unassignPropertyFromAgent);
+router.post('/agents/:agentId/properties/:propertyId', (req, res, next) => adminAssignmentController.assignPropertyToAgent(req as any, res));
+router.delete('/agents/:agentId/properties/:propertyId', (req, res, next) => adminAssignmentController.unassignPropertyFromAgent(req as any, res));
 
 // Tenant Assignments
-// POST   /api/admin/agents/:agentId/tenants/:tenantId - Assign tenant to agent
-// DELETE /api/admin/agents/:agentId/tenants/:tenantId - Unassign tenant from agent
-router.post('/agents/:agentId/tenants/:tenantId', adminAssignmentController.assignTenantToAgent);
-router.delete('/agents/:agentId/tenants/:tenantId', adminAssignmentController.unassignTenantFromAgent);
+router.post('/agents/:agentId/tenants/:tenantId', (req, res, next) => adminAssignmentController.assignTenantToAgent(req as any, res));
+router.delete('/agents/:agentId/tenants/:tenantId', (req, res, next) => adminAssignmentController.unassignTenantFromAgent(req as any, res));
 
 // Assignment Lists (for admin dashboard)
-// GET /api/admin/assignments/properties - List all property assignments
-// GET /api/admin/assignments/tenants    - List all tenant assignments
-router.get('/assignments/properties', adminAssignmentController.getPropertyAssignments);
-router.get('/assignments/tenants', adminAssignmentController.getTenantAssignments);
+router.get('/assignments/properties', (req, res, next) => adminAssignmentController.getPropertyAssignments(req as any, res));
+router.get('/assignments/tenants', (req, res, next) => adminAssignmentController.getTenantAssignments(req as any, res));
 export default router;

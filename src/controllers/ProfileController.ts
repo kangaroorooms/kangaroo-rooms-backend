@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { getPrismaClient } from '../utils/prisma';
+const prisma = getPrismaClient();
 export class ProfileController {
   constructor() {
     // Bind all methods to preserve 'this' context
@@ -26,7 +26,7 @@ export class ProfileController {
           name: true,
           role: true,
           phone: true,
-          address: true,
+          city: true,
           createdAt: true
         }
       });
@@ -53,7 +53,7 @@ export class ProfileController {
       const {
         name,
         phone,
-        address
+        city
       } = req.body;
       const user = await prisma.user.update({
         where: {
@@ -62,7 +62,7 @@ export class ProfileController {
         data: {
           name,
           phone,
-          address
+          city
         },
         select: {
           id: true,
@@ -70,7 +70,7 @@ export class ProfileController {
           name: true,
           role: true,
           phone: true,
-          address: true
+          city: true
         }
       });
       res.json(user);

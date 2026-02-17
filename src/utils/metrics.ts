@@ -7,29 +7,23 @@ import { logger } from './logger';
 // For now, in-memory counters with periodic logging.
 //
 // KEY METRICS:
-// - redis_hit:  Request served from Redis cache (fastest path, ~0.1ms)
-// - db_hit:     Request served from PostgreSQL (medium path, ~2-5ms)
-// - miss:       New request, no cached response (full processing)
-// - replay:     Cached response replayed to client (redis_hit + db_hit)
-// - lock_acquired: Stampede lock obtained (this request will process)
-// - lock_rejected: Stampede lock denied (duplicate in-flight request)
-// - redis_fallback: Redis unavailable, fell back to DB-only path
-// - conflict:   Payload mismatch on key reuse (409 Conflict)
+// - cache_hit: Request served from local in-memory cache (fastest path)
+// - db_hit:    Request served from PostgreSQL (~2-5ms)
+// - miss:      New request, no cached response (full processing)
+// - replay:    Cached response replayed to client (cache_hit + db_hit)
+// - conflict:  Payload mismatch on key reuse (409 Conflict)
 //
 // HEALTH INDICATORS:
-// - Healthy system: redis_hit / total > 0.85 (85%+ Redis hit rate)
-// - Warning:        redis_hit / total < 0.50 (Redis may be unhealthy)
-// - Critical:       redis_fallback increasing (Redis is failing)
+// - Healthy system: low miss rate relative to total
+// - Warning:        high store_failure count
+// - Critical:       store_failure increasing rapidly
 // =============================================================================
 
 interface MetricCounters {
-  redis_hit: number;
+  cache_hit: number;
   db_hit: number;
   miss: number;
   replay: number;
-  lock_acquired: number;
-  lock_rejected: number;
-  redis_fallback: number;
   conflict: number;
   expired_cleanup: number;
   store_success: number;
@@ -37,13 +31,10 @@ interface MetricCounters {
 }
 class IdempotencyMetrics {
   private counters: MetricCounters = {
-    redis_hit: 0,
+    cache_hit: 0,
     db_hit: 0,
     miss: 0,
     replay: 0,
-    lock_acquired: 0,
-    lock_rejected: 0,
-    redis_fallback: 0,
     conflict: 0,
     expired_cleanup: 0,
     store_success: 0,
@@ -68,24 +59,25 @@ class IdempotencyMetrics {
     };
   }
 
-  /** Calculate hit rate (redis_hit / total lookups) */
+  /** Calculate hit rate */
   getHitRate(): {
-    redisHitRate: number;
+    cacheHitRate: number;
     dbHitRate: number;
     missRate: number;
     total: number;
   } {
-    const total = this.counters.redis_hit + this.counters.db_hit + this.counters.miss;
+    const total =
+    this.counters.cache_hit + this.counters.db_hit + this.counters.miss;
     if (total === 0) {
       return {
-        redisHitRate: 0,
+        cacheHitRate: 0,
         dbHitRate: 0,
         missRate: 0,
         total: 0
       };
     }
     return {
-      redisHitRate: this.counters.redis_hit / total,
+      cacheHitRate: this.counters.cache_hit / total,
       dbHitRate: this.counters.db_hit / total,
       missRate: this.counters.miss / total,
       total
@@ -97,10 +89,7 @@ class IdempotencyMetrics {
     status: 'healthy' | 'warning' | 'critical';
     details: string;
   } {
-    const {
-      redisHitRate,
-      total
-    } = this.getHitRate();
+    const { total } = this.getHitRate();
 
     // Not enough data to assess
     if (total < 10) {
@@ -110,26 +99,18 @@ class IdempotencyMetrics {
       };
     }
 
-    // Critical: Redis is failing frequently
-    if (this.counters.redis_fallback > total * 0.1) {
+    // Critical: Store failures are high
+    if (this.counters.store_failure > total * 0.1) {
       return {
         status: 'critical',
-        details: `Redis fallback rate ${(this.counters.redis_fallback / total * 100).toFixed(1)}% — Redis may be down`
-      };
-    }
-
-    // Warning: Low Redis hit rate
-    if (redisHitRate < 0.5) {
-      return {
-        status: 'warning',
-        details: `Redis hit rate ${(redisHitRate * 100).toFixed(1)}% — below 50% threshold`
+        details: `Store failure rate ${(this.counters.store_failure / total * 100).toFixed(1)}% — DB writes may be failing`
       };
     }
 
     // Healthy
     return {
       status: 'healthy',
-      details: `Redis hit rate ${(redisHitRate * 100).toFixed(1)}% — system performing well`
+      details: `System performing well — ${total} total requests processed`
     };
   }
 
@@ -156,17 +137,14 @@ class IdempotencyMetrics {
   private startPeriodicLogging(): void {
     this.logTimer = setInterval(() => {
       const snapshot = this.getSnapshot();
-      const {
-        total,
-        redisHitRate
-      } = snapshot.hitRate;
+      const { total, cacheHitRate } = snapshot.hitRate;
 
       // Only log if there's activity
       if (total > 0) {
         logger.info('Idempotency metrics snapshot', {
           event: 'IDEMPOTENCY_METRICS',
           ...snapshot.counters,
-          redisHitRate: `${(redisHitRate * 100).toFixed(1)}%`,
+          cacheHitRate: `${(cacheHitRate * 100).toFixed(1)}%`,
           totalRequests: total,
           healthStatus: snapshot.health.status,
           uptimeSeconds: snapshot.uptimeSeconds

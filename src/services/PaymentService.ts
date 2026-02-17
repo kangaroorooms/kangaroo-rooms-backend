@@ -110,7 +110,7 @@ export class PaymentService {
       }
 
       // Already processed
-      if (payment.status === PaymentStatus.PAID) {
+      if (payment.status === PaymentStatus.VERIFIED) {
         logger.warn('Payment already processed', {
           paymentId: payment.id
         });
@@ -129,7 +129,7 @@ export class PaymentService {
       if (!isValid) {
         await this.paymentRepository.update(payment.id, {
           status: PaymentStatus.FAILED,
-          paymentId: razorpay_payment_id
+          razorpayPaymentId: razorpay_payment_id
         });
         logger.error('Payment signature verification failed', {
           paymentId: payment.id
@@ -140,10 +140,10 @@ export class PaymentService {
         };
       }
 
-      // Mark payment as PAID
+      // Mark payment as VERIFIED
       await this.paymentRepository.update(payment.id, {
-        status: PaymentStatus.PAID,
-        paymentId: razorpay_payment_id
+        status: PaymentStatus.VERIFIED,
+        razorpayPaymentId: razorpay_payment_id
       });
 
       // Upgrade subscription

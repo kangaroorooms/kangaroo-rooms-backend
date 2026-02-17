@@ -52,7 +52,7 @@ router.use(requireAgent);
  *
  * Empty array returned if no assignments (not an error).
  */
-router.get('/properties', agentController.getAssignedProperties);
+router.get('/properties', (req, res, next) => agentController.getAssignedProperties(req as any, res));
 
 /**
  * GET /api/agent/tenants
@@ -67,7 +67,7 @@ router.get('/properties', agentController.getAssignedProperties);
  *
  * Empty array returned if no assignments (not an error).
  */
-router.get('/tenants', agentController.getAssignedTenants);
+router.get('/tenants', (req, res, next) => agentController.getAssignedTenants(req as any, res));
 
 // ============================================================================
 // SAFETY: NO MUTATION ROUTES

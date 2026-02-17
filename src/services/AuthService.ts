@@ -1,9 +1,9 @@
 import bcrypt from 'bcryptjs';
-import { UserRepository } from '../repositories/UserRepository';
+import { PrismaUserRepository } from '../repositories/PrismaUserRepository';
 import { generateToken } from '../utils/jwt';
 import { Role } from '@prisma/client';
 export class AuthService {
-  constructor(private userRepository: UserRepository) {}
+  constructor(private userRepository: PrismaUserRepository) {}
   async register(email: string, password: string, name: string, role: Role) {
     // Validate role - only TENANT and OWNER can sign up
     if (role !== Role.TENANT && role !== Role.OWNER) {
@@ -24,7 +24,10 @@ export class AuthService {
       email,
       password: hashedPassword,
       name,
-      role
+      role,
+      phone: null,
+      city: null,
+      isActive: true
     });
 
     // Generate token

@@ -1,4 +1,4 @@
-import { User } from '../models/User';
+import { User } from '@prisma/client';
 import { Room, RoomFilters } from '../models/Room';
 import { Booking } from '../models/Booking';
 import { TenantSubscription } from '../models/TenantSubscription';

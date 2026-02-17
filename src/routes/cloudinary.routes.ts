@@ -4,8 +4,8 @@ import { authMiddleware } from '../middleware/auth.middleware';
 const router = Router();
 const cloudinaryController = new CloudinaryController();
 
-// ✅ PUBLIC: get signature for upload
-router.get('/signature', cloudinaryController.getUploadSignature);
+// ✅ SECURED: require authentication for upload signature
+router.get('/signature', authMiddleware, cloudinaryController.getUploadSignature);
 
 // ✅ PROTECTED: delete image (OWNER only via JWT)
 router.delete('/image/:publicId', authMiddleware, cloudinaryController.deleteImage);

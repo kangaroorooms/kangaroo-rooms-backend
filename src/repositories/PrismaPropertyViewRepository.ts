@@ -19,12 +19,14 @@ export class PrismaPropertyViewRepository {
   async create(data: {
     tenantId: string;
     propertyId: string;
+    city: string;
   }): Promise<PropertyView> {
     try {
       return await this.prisma.propertyView.create({
         data: {
           tenantId: data.tenantId,
-          propertyId: data.propertyId
+          propertyId: data.propertyId,
+          city: data.city
         }
       });
     } catch (error: any) {

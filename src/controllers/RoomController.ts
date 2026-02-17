@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { RoomService } from '../services/RoomService';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { RoomFilters } from '../models/Room';
+import { logger } from '../utils/logger';
 export class RoomController {
   constructor(private roomService: RoomService) {
     // Bind all methods to preserve 'this' context
@@ -12,25 +14,28 @@ export class RoomController {
     this.getOwnerRooms = this.getOwnerRooms.bind(this);
     this.toggleRoomStatus = this.toggleRoomStatus.bind(this);
   }
-  async createRoom(req: Request, res: Response): Promise<void> {
+  async createRoom(req: AuthRequest, res: Response): Promise<void> {
     try {
-      console.log('[RoomController] Creating room for owner:', req.user?.userId);
-      console.log('[RoomController] Request body:', JSON.stringify(req.body, null, 2));
+      logger.info('Creating room for owner', {
+        ownerId: req.user?.userId
+      });
       const room = await this.roomService.createRoom({
         ...req.body,
         ownerId: req.user!.userId
       });
-      console.log('[RoomController] Room created successfully:', room.id);
+      logger.info('Room created successfully', {
+        roomId: room.id
+      });
       res.status(201).json({
         success: true,
         data: room,
         message: 'Room created successfully'
       });
     } catch (error) {
-      console.error('[RoomController] Error creating room:', error);
+      logger.error('Error creating room', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       if (error instanceof Error) {
-        console.error('[RoomController] Error message:', error.message);
-
         // Provide specific error messages
         if (error.message.includes('City not found')) {
           res.status(400).json({
@@ -49,7 +54,19 @@ export class RoomController {
   }
   async getAllRooms(req: Request, res: Response) {
     try {
-      const result = await this.roomService.getAllRooms(req.query);
+      const filters: RoomFilters = {
+        page: Number(req.query.page ?? 1),
+        limit: Number(req.query.limit ?? 20),
+        onlyActive: req.query.onlyActive !== 'false',
+        city: typeof req.query.city === 'string' ? req.query.city : undefined,
+        roomType: typeof req.query.roomType === 'string' ? req.query.roomType as any : undefined,
+        idealFor: typeof req.query.idealFor === 'string' ? req.query.idealFor as any : undefined,
+        isVerified: req.query.isVerified === 'true',
+        isPopular: req.query.isPopular === 'true' ? true : undefined,
+        minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
+        maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined
+      };
+      const result = await this.roomService.getAllRooms(filters);
       // ✅ FIX: Wrap response in standard { success, data, meta } format
       res.json({
         success: true,
