@@ -1,40 +1,30 @@
 import { Router, Request, Response } from 'express';
-const router = Router();
+import { PrismaClient } from '@prisma/client';
 
-/**
- * @swagger
- * /health:
- *   get:
- *     summary: Health check endpoint
- *     tags: [Health]
- *     responses:
- *       200:
- *         description: Service is healthy
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: ok
- *                 uptime:
- *                   type: number
- *                   example: 12345.67
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 storage:
- *                   type: string
- *                   example: in-memory
- */
+const router = Router();
+const prisma = new PrismaClient();
+
 router.get('/', async (req: Request, res: Response) => {
-  const health = {
-    status: 'ok',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-    storage: 'in-memory'
-  };
-  res.status(200).json(health);
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+
+    res.status(200).json({
+      status: 'ok',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      storage: 'postgresql'
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      status: 'error',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      storage: 'database-disconnected'
+    });
+
+  }
 });
+
 export default router;
