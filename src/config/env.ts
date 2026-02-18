@@ -6,10 +6,10 @@ import path from 'path';
  * - Ignores dotenvx / auto loaders
  * - Overrides any previously loaded vars
  */
-dotenv.config({
-  path: path.resolve(process.cwd(), '.env'),
-  override: true
-});
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
+
 
 /**
  * Fail-fast helper
