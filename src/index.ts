@@ -1,27 +1,27 @@
-import express from 'express';
-import { env } from './config/env';
-import { errorHandler } from './middleware/error.middleware';
-import { requestLogger } from './middleware/logging.middleware';
+import express from "express";
+import { env } from "./config/env";
+import { errorHandler } from "./middleware/error.middleware";
+import { requestLogger } from "./middleware/logging.middleware";
 import {
   helmetMiddleware,
   corsMiddleware,
-  generalRateLimiter } from
-'./middleware/security.middleware';
-import { logger } from './utils/logger';
-import routes from './routes';
-import healthRoutes from './routes/health.routes';
-import { setupSwagger } from './swagger';
+  generalRateLimiter,
+} from "./middleware/security.middleware";
+import { logger } from "./utils/logger";
+import routes from "./routes";
+import healthRoutes from "./routes/health.routes";
+import { setupSwagger } from "./swagger";
 import {
   cleanupExpiredIdempotencyRecords,
-  getIdempotencyMetrics } from
-'./middleware/idempotency.middleware';
-import { idempotencyMetrics } from './utils/metrics';
+  getIdempotencyMetrics,
+} from "./middleware/idempotency.middleware";
+import { idempotencyMetrics } from "./utils/metrics";
 import {
   startOutboxWorker,
   stopOutboxWorker,
   getOutboxDetailedStats,
-  cleanupDeliveredOutboxEvents } from
-'./services/OutboxWorker';
+  cleanupDeliveredOutboxEvents,
+} from "./services/OutboxWorker";
 const app = express();
 
 // Security middleware
@@ -31,14 +31,14 @@ app.use(corsMiddleware);
 // Body parsing (increase limit for base64 images)
 app.use(
   express.json({
-    limit: '20mb'
-  })
+    limit: "20mb",
+  }),
 );
 app.use(
   express.urlencoded({
-    limit: '20mb',
-    extended: true
-  })
+    limit: "20mb",
+    extended: true,
+  }),
 );
 
 // Rate limiting (after body parsing, before routes)
@@ -48,31 +48,31 @@ app.use(generalRateLimiter);
 app.use(requestLogger);
 
 // Health check (before rate limiting for monitoring)
-app.use('/health', healthRoutes);
+app.use("/health", healthRoutes);
 
 // ── Enhanced health endpoint with Idempotency + Outbox metrics ──
-app.get('/health/detailed', async (_req, res) => {
+app.get("/health/detailed", async (_req, res) => {
   const idempotencySnapshot = getIdempotencyMetrics();
   const outboxStats = await getOutboxDetailedStats();
   const overallStatus =
-  idempotencySnapshot.health.status !== 'critical' ? 'healthy' : 'degraded';
+    idempotencySnapshot.health.status !== "critical" ? "healthy" : "degraded";
   res.json({
     status: overallStatus,
     timestamp: new Date().toISOString(),
     services: {
       idempotency: idempotencySnapshot,
-      outbox: outboxStats
-    }
+      outbox: outboxStats,
+    },
   });
 });
 
 // API routes
-app.use('/api', routes);
+app.use("/api", routes);
 
 // Swagger documentation (if enabled)
 if (env.ENABLE_SWAGGER) {
   setupSwagger(app);
-  logger.info('Swagger documentation enabled at /api-docs');
+  logger.info("Swagger documentation enabled at /api-docs");
 }
 
 // ── Idempotency TTL Cleanup ──
@@ -87,16 +87,16 @@ setInterval(async () => {
       logger.info(`Idempotency cleanup: removed ${deleted} expired DB records`);
     }
   } catch (error: any) {
-    logger.error('Idempotency cleanup failed', {
-      error: error.message
+    logger.error("Idempotency cleanup failed", {
+      error: error.message,
     });
   }
 }, CLEANUP_INTERVAL_MS);
 
 // Run once on startup to clear any backlog
 cleanupExpiredIdempotencyRecords().catch((err) => {
-  logger.warn('Initial idempotency cleanup failed', {
-    error: err.message
+  logger.warn("Initial idempotency cleanup failed", {
+    error: err.message,
   });
 });
 
@@ -118,8 +118,8 @@ setInterval(async () => {
       logger.info(`Outbox cleanup: removed ${deleted} delivered events`);
     }
   } catch (error: any) {
-    logger.error('Outbox cleanup failed', {
-      error: error.message
+    logger.error("Outbox cleanup failed", {
+      error: error.message,
     });
   }
 }, OUTBOX_CLEANUP_INTERVAL_MS);
@@ -131,10 +131,10 @@ app.use(errorHandler);
 async function startServer() {
   try {
     // Database connection via Prisma (configured in prisma/schema.prisma)
-    logger.info('Using PostgreSQL database via Prisma ORM');
+    logger.info("Using PostgreSQL database via Prisma ORM");
 
     // Start listening
-    app.listen(env.PORT, () => {
+    app.listen(env.PORT, "0.0.0.0", () => {
       logger.info(`🚀 Server running on port ${env.PORT}`);
       logger.info(`📝 Environment: ${env.NODE_ENV}`);
       logger.info(`💾 Database: PostgreSQL (Prisma ORM)`);
@@ -143,7 +143,7 @@ async function startServer() {
       }
     });
   } catch (error) {
-    logger.error('Failed to start server', error);
+    logger.error("Failed to start server", error);
     process.exit(1);
   }
 }
@@ -158,9 +158,9 @@ async function gracefulShutdown(signal: string) {
   // Shutdown metrics logging
   idempotencyMetrics.shutdown();
 
-  logger.info('Cleanup complete, exiting');
+  logger.info("Cleanup complete, exiting");
   process.exit(0);
 }
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 startServer();
